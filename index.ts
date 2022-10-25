@@ -51,3 +51,13 @@ const wss = new WebSocketServer({ noServer: true })
 server.listen(3000, () => {
   console.log('listening on port 3000')
 })
+
+type HotModule = {
+  isDirty: boolean
+  isHotEnabled: boolean
+  isHotAccepted: boolean
+  dependents: Set<string>
+  dependencies: Set<string>
+}
+
+type HotModuleGraph = Map<string, HotModule>
