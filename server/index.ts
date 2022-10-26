@@ -5,8 +5,7 @@ import http from 'node:http'
 import esbuild from 'esbuild'
 import { WebSocketServer } from 'ws'
 
-const __dirname = path.dirname(url.fileURLToPath(import.meta.url))
-const clientDir = path.resolve(__dirname, '..', 'client')
+const clientDir = path.resolve(url.fileURLToPath(new URL('../client', import.meta.url)))
 
 const WANTS_HMR = /if\s*\(import\.meta\.hot\)/
 
@@ -27,7 +26,7 @@ const server = http.createServer(async (req, res) => {
         sourcemap: 'inline',
         sourcefile: url,
         banner: WANTS_HMR.test(ts)
-          ? `import{createHotContext}from'./hmr.ts';import.meta.hot=createHotContext('${req.url}')`
+          ? `import{createHotContext}from'/hmr.ts';import.meta.hot=createHotContext('${url}')`
           : ''
       })
       res.writeHead(200, { 'Content-Type': 'text/javascript' }).end(code)
@@ -41,26 +40,12 @@ const server = http.createServer(async (req, res) => {
   }
 })
 
-server.on('upgrade', (req, socket, head) => {
-  if (req.url !== '/__hmr') return
-  wss.handleUpgrade(req, socket, head, ws => {
-    console.log('[HMR] - client connected...')
-    wss.emit('connection', ws, req)
-  })
-})
+const wss = new WebSocketServer({ server, path: '/__hmr' })
 
-const wss = new WebSocketServer({ noServer: true })
+wss.on('connection', (_ws, _req) => {
+  console.log('[HMR] - client connected...')
+})
 
 server.listen(3000, () => {
   console.log('listening on port 3000')
 })
-
-type HotModule = {
-  isDirty: boolean
-  isHotEnabled: boolean
-  isHotAccepted: boolean
-  dependents: Set<string>
-  dependencies: Set<string>
-}
-
-type HotModuleGraph = Map<string, HotModule>
