@@ -1,10 +1,9 @@
-class HotModuleWebSocket extends EventTarget {
+class HotModuleWebSocket {
 
   private _socket: WebSocket
   private _messageQueue: Message[] = []
 
   constructor(url: string) {
-    super()
     const connect = (): WebSocket => {
       let socket = new WebSocket(url)
       socket.addEventListener('open', () => {
@@ -64,7 +63,7 @@ export function createHotContext(moduleId: string): HotContext {
   return new HotContext(moduleId)
 }
 
-class HotContext {
+export class HotContext {
 
   constructor(private moduleId: string) {}
 
@@ -79,6 +78,7 @@ class HotContext {
     }
     mod.callbacks.push({ deps, fn })
     hotModules.set(this.moduleId, mod)
+    console.log('[HMR] - registered', this.moduleId)
   }
 
   accept(): void
