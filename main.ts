@@ -37,14 +37,6 @@ class HotModuleWebSocket extends EventTarget {
 
 }
 
-
-
-class HotModuleContext implements IHotModuleContext {
-
-  constructor(private moduleId: string) {}
-
-}
-
 const socket = new HotModuleWebSocket(`ws://${window.location.host}/__hmr`)
 
 socket.listen(message => {
@@ -57,8 +49,67 @@ socket.listen(message => {
     console.error('[HMR] - received unknown', message)
     return
   }
+  // TODO: apply update
   console.log('[HMR] - received "update"')
 })
+
+const hotModules = new Map<string, HotModule>()
+const hotData = new Map<string, Record<string, any>>()
+const disposeCallbacks = new Map<string, (data: unknown) => void | Promise<void>>()
+
+export function createHotContext(moduleId: string): HotContext {
+  hotData.set(moduleId, hotData.get(moduleId) ?? {})
+  const mod = hotModules.get(moduleId)
+  mod != null && (mod.callbacks = [])
+  return new HotContext(moduleId)
+}
+
+class HotContext {
+
+  constructor(private moduleId: string) {}
+
+  get data(): any {
+    return hotData.get(this.moduleId)
+  }
+
+  acceptDeps(deps: string[], fn: HotCallback['fn'] = () => {}) {
+    const mod: HotModule = hotModules.get(this.moduleId) ?? {
+      moduleId: this.moduleId,
+      callbacks: []
+    }
+    mod.callbacks.push({ deps, fn })
+    hotModules.set(this.moduleId, mod)
+  }
+
+  accept(): void
+  accept(callback: (mod: ModuleNamespace | undefined) => void): void
+  accept(dep: string, callback: (mod: ModuleNamespace | undefined) => void): void
+  accept(deps: readonly string[], callback: (mods: ModuleNamespace[] | undefined) => void): void
+  accept(deps?: any, callback?: (...args: any[]) => void): void {
+    if (deps == null || typeof deps === 'function') {
+      this.acceptDeps([this.moduleId], ([mod]) => deps?.(mod))
+      return
+    }
+    if (typeof deps === 'string') {
+      this.acceptDeps([deps], ([mod]) => callback?.(mod))
+      return
+    }
+    if (Array.isArray(deps)) {
+      this.acceptDeps(deps, callback)
+      return
+    }
+    throw new Error('invalid call to hot.accept()')
+  }
+
+  dispose(callback: (data: any) => void): void {
+    disposeCallbacks.set(this.moduleId, callback)
+  }
+
+  invalidate(): void {
+    // TODO: tell the server to re-perform hmr propagation from this module as root
+  }
+
+}
 
 type Message =
   | { type: 'reload' }
@@ -68,20 +119,12 @@ type ModuleNamespace = Record<string, any> & {
   [Symbol.toStringTag]: 'Module'
 }
 
-interface IHotModuleContext {
-  readonly data: any
+type HotCallback = {
+  deps: string[]
+  fn: (modules: Array<ModuleNamespace | undefined>) => void
+}
 
-  accept(): void
-  accept(cb: (mod: ModuleNamespace | undefined) => void): void
-  accept(dep: string, cb: (mod: ModuleNamespace | undefined) => void): void
-  accept(
-    deps: readonly string[],
-    cb: (mods: Array<ModuleNamespace | undefined>) => void
-  ): void
-
-  dispose(cb: (data: any) => void): void
-
-  decline(): void
-
-  invalidate(): void
+type HotModule = {
+  moduleId: string
+  callbacks: HotCallback[]
 }
