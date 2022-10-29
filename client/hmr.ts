@@ -1,15 +1,14 @@
-class HotModuleWebSocket extends EventTarget {
+class HotModuleWebSocket {
 
   private _socket: WebSocket
   private _listeners: OnMessage[] = []
   private _messageQueue: Message[] = []
 
   constructor(url: string) {
-    super()
     const connect = (): WebSocket => {
       let socket = new WebSocket(url)
       socket.addEventListener('open', () => {
-        console.log(`[HMR] - connected to server at ${url}`)
+        console.log('[HMR] - connected')
         this._messageQueue.forEach(message => this.send(message))
         this._messageQueue = []
       }, { once: true })
@@ -52,7 +51,7 @@ socket.listen(message => {
     console.error('[HMR] - received unknown', message)
     return
   }
-  console.log(`[HMR] - received "update" ${message.url}`)
+  console.log(`[HMR] - updated ${message.url}`)
   handleUpdate(message.url)
 })
 

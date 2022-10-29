@@ -47,7 +47,6 @@ wss.once('connection', () => {
   setTimeout(() => {
     wss.clients.forEach(ws => ws.send(JSON.stringify({ type: 'reload' })))
   }, 100)
-  wss.on('connection', () => console.log('[HMR] - client connected...'))
 })
 
 const watcher = chokidar.watch(['**/*.ts'], {
