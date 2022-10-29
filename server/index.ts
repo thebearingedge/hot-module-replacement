@@ -6,7 +6,8 @@ import esbuild from 'esbuild'
 import chokidar from 'chokidar'
 import { WebSocketServer } from 'ws'
 
-const clientDir = path.resolve(url.fileURLToPath(new URL('../client', import.meta.url)))
+const __dirname = path.dirname(url.fileURLToPath(import.meta.url))
+const clientDir = path.resolve(__dirname, '..', 'client')
 
 const WANTS_HMR = /if\s*\(import\.meta\.hot\)/
 
@@ -20,6 +21,16 @@ const server = http.createServer(async (req, res) => {
         }))
       return
     }
+    if (file === '/__hmr-client.ts') {
+      const ts = await fs.promises.readFile(path.join(__dirname, file), 'utf8')
+      const { code } = await esbuild.transform(ts, {
+        loader: 'ts',
+        sourcemap: 'inline',
+        sourcefile: file,
+      })
+      res.writeHead(200, { 'Content-Type': 'text/javascript' }).end(code)
+      return
+    }
     if (path.extname(file) === '.ts') {
       const ts = await fs.promises.readFile(path.join(clientDir, file), 'utf8')
       const { code } = await esbuild.transform(ts, {
@@ -27,7 +38,7 @@ const server = http.createServer(async (req, res) => {
         sourcemap: 'inline',
         sourcefile: file,
         banner: WANTS_HMR.test(ts)
-          ? `import{__hmr}from'/hmr.ts';import.meta.hot=__hmr('${file}')`
+          ? `import{__hmr}from'/__hmr-client.ts';import.meta.hot=__hmr('${file}')`
           : ''
       })
       res.writeHead(200, { 'Content-Type': 'text/javascript' }).end(code)

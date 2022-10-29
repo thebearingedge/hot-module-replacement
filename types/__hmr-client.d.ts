@@ -1,4 +1,4 @@
-import type { HotContext } from './hmr'
+import type { HotContext } from '~/server/__hmr-client'
 
 declare global {
   interface ImportMeta {
