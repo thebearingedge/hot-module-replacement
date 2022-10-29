@@ -1,7 +1,7 @@
 let client: HotClient
 
 export function __hmr(url: string): HotContext {
-  client ??= new HotClient(`ws://${window.location.host}/__hmr`)
+  client ??= new HotClient(`ws://${window.location.host}`)
   const mod = client.register(url)
   mod != null && (mod.accepts = [])
   return new HotContext(url, client)
@@ -57,7 +57,7 @@ class HotClient {
   }
 
   #connect(address: string): WebSocket {
-    const socket = new WebSocket(address)
+    const socket = new WebSocket(address, 'hot-module-replacement')
     socket.addEventListener('message', this.#handleMessage)
     socket.addEventListener('open', this.#handleOpen, { once: true })
     socket.addEventListener('close', this.#handleClose, { once: true })

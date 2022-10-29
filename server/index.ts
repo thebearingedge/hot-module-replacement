@@ -52,7 +52,11 @@ const server = http.createServer(async (req, res) => {
   }
 })
 
-const wss = new WebSocketServer({ server, path: '/__hmr', clientTracking: true })
+const wss = new WebSocketServer({
+  server,
+  clientTracking: true,
+  handleProtocols: () => 'hot-module-replacement'
+})
 
 wss.once('connection', () => {
   setTimeout(() => {
