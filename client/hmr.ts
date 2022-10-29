@@ -1,9 +1,11 @@
-class HotModuleWebSocket {
+class HotModuleWebSocket extends EventTarget {
 
   private _socket: WebSocket
+  private _listeners: OnMessage[] = []
   private _messageQueue: Message[] = []
 
   constructor(url: string) {
+    super()
     const connect = (): WebSocket => {
       let socket = new WebSocket(url)
       socket.addEventListener('open', () => {
@@ -11,6 +13,10 @@ class HotModuleWebSocket {
         this._messageQueue.forEach(message => this.send(message))
         this._messageQueue = []
       }, { once: true })
+      socket.addEventListener('message', ({ data }) => {
+        const message = JSON.parse(data)
+        this._listeners.forEach(listener => listener(message))
+      })
       socket.addEventListener('close', () => {
         console.log(`[HMR] - reconnecting...`)
         setTimeout(() => { this._socket = connect() }, 1000)
@@ -21,9 +27,7 @@ class HotModuleWebSocket {
   }
 
   listen(onMessage: (message: Message) => void): void {
-    this._socket.addEventListener('message', ({ data }) => {
-      onMessage(JSON.parse(data) as Message)
-    })
+    this._listeners.push(onMessage)
   }
 
   send(message: Message): void {
@@ -48,37 +52,43 @@ socket.listen(message => {
     console.error('[HMR] - received unknown', message)
     return
   }
-  // TODO: apply update
-  console.log('[HMR] - received "update"')
+  console.log(`[HMR] - received "update" ${message.url}`)
+  handleUpdate(message.url)
 })
 
 const hotModules = new Map<string, HotModule>()
-const hotData = new Map<string, Record<string, any>>()
-const disposeCallbacks = new Map<string, (data: unknown) => void | Promise<void>>()
 
-export function createHotContext(moduleId: string): HotContext {
-  hotData.set(moduleId, hotData.get(moduleId) ?? {})
-  const mod = hotModules.get(moduleId)
-  mod != null && (mod.callbacks = [])
-  return new HotContext(moduleId)
+async function handleUpdate(url: string): Promise<void> {
+  const mod = hotModules.get(url)
+  if (mod == null) return
+  mod.disposes.splice(0).forEach(dispose => dispose(mod.data))
+  const updatedAt = Date.now()
+  for (const { deps, callback } of mod.accepts.splice(0)) {
+    const modules = await Promise.all(deps.map(url => (
+      import(`${url}?q=${updatedAt}`)
+    )))
+    callback(modules)
+  }
+}
+
+export function createHotContext(url: string): HotContext {
+  const mod = hotModules.get(url)
+  mod != null && (mod.accepts = [])
+  return new HotContext(url)
 }
 
 export class HotContext {
 
-  constructor(private moduleId: string) {}
+  constructor(private url: string) {}
 
-  get data(): any {
-    return hotData.get(this.moduleId)
-  }
-
-  acceptDeps(deps: string[], fn: HotCallback['fn'] = () => {}) {
-    const mod: HotModule = hotModules.get(this.moduleId) ?? {
-      moduleId: this.moduleId,
-      callbacks: []
+  acceptDeps(deps: string[], callback: AcceptCallback['callback'] = () => {}) {
+    const mod: HotModule = hotModules.get(this.url) ?? {
+      url: this.url,
+      accepts: [],
+      disposes: []
     }
-    mod.callbacks.push({ deps, fn })
-    hotModules.set(this.moduleId, mod)
-    console.log('[HMR] - registered', this.moduleId)
+    mod.accepts.push({ deps, callback })
+    hotModules.set(this.url, mod)
   }
 
   accept(): void
@@ -87,7 +97,7 @@ export class HotContext {
   accept(deps: readonly string[], callback: (mods: ModuleNamespace[] | undefined) => void): void
   accept(deps?: any, callback?: (...args: any[]) => void): void {
     if (deps == null || typeof deps === 'function') {
-      this.acceptDeps([this.moduleId], ([mod]) => deps?.(mod))
+      this.acceptDeps([this.url], ([mod]) => deps?.(mod))
       return
     }
     if (typeof deps === 'string') {
@@ -101,8 +111,13 @@ export class HotContext {
     throw new Error('invalid call to hot.accept()')
   }
 
-  dispose(callback: (data: any) => void): void {
-    disposeCallbacks.set(this.moduleId, callback)
+  dispose(callback: DisposeCallback): void {
+    const mod: HotModule = hotModules.get(this.url) ?? {
+      url: this.url,
+      accepts: [],
+      disposes: []
+    }
+    mod.disposes.push(callback)
   }
 
   invalidate(): void {
@@ -115,16 +130,22 @@ type Message =
   | { type: 'reload' }
   | { type: 'update', url: string }
 
+type OnMessage = (message: Message) => void
+
 type ModuleNamespace = Record<string, any> & {
   [Symbol.toStringTag]: 'Module'
 }
 
-type HotCallback = {
+type AcceptCallback = {
   deps: string[]
-  fn: (modules: Array<ModuleNamespace | undefined>) => void
+  callback: (modules: Array<ModuleNamespace | undefined>) => void
 }
 
+type DisposeCallback = (data: any) => void
+
 type HotModule = {
-  moduleId: string
-  callbacks: HotCallback[]
+  url: string
+  data?: any
+  accepts: AcceptCallback[]
+  disposes: DisposeCallback[]
 }

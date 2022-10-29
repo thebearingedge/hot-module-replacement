@@ -4,11 +4,13 @@
     "dev": "tsx watch server/index.ts"
   },
   "dependencies": {
+    "chokidar": "^3.5.3",
     "ws": "^8.10.0"
   },
   "devDependencies": {
     "@types/ws": "^8.5.3",
     "esbuild": "^0.15.12",
+    "markuplint": "^2.10.2",
     "tsx": "^3.11.0",
     "typescript": "^4.8.4"
   }

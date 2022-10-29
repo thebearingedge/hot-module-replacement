@@ -3,6 +3,7 @@ import url from 'node:url'
 import path from 'node:path'
 import http from 'node:http'
 import esbuild from 'esbuild'
+import chokidar from 'chokidar'
 import { WebSocketServer } from 'ws'
 
 const clientDir = path.resolve(url.fileURLToPath(new URL('../client', import.meta.url)))
@@ -10,23 +11,23 @@ const clientDir = path.resolve(url.fileURLToPath(new URL('../client', import.met
 const WANTS_HMR = /if\s*\(import\.meta\.hot\)/
 
 const server = http.createServer(async (req, res) => {
-  const { url = '/' } = req
+  const { pathname: file } = new URL(`req://${req.url ?? '/'}`)
   try {
-    if (url === '/') {
+    if (file === '/') {
       fs.createReadStream(path.join(clientDir, 'index.html'))
         .pipe(res.writeHead(200, {
           'Content-Type': 'text/html'
         }))
       return
     }
-    if (path.extname(url) === '.ts') {
-      const ts = await fs.promises.readFile(path.join(clientDir, url), 'utf8')
+    if (path.extname(file) === '.ts') {
+      const ts = await fs.promises.readFile(path.join(clientDir, file), 'utf8')
       const { code } = await esbuild.transform(ts, {
         loader: 'ts',
         sourcemap: 'inline',
-        sourcefile: url,
+        sourcefile: file,
         banner: WANTS_HMR.test(ts)
-          ? `import{createHotContext}from'/hmr.ts';import.meta.hot=createHotContext('${url}')`
+          ? `import{createHotContext}from'/hmr.ts';import.meta.hot=createHotContext('${file}')`
           : ''
       })
       res.writeHead(200, { 'Content-Type': 'text/javascript' }).end(code)
@@ -40,10 +41,25 @@ const server = http.createServer(async (req, res) => {
   }
 })
 
-const wss = new WebSocketServer({ server, path: '/__hmr' })
+const wss = new WebSocketServer({ server, path: '/__hmr', clientTracking: true })
 
-wss.on('connection', (_ws, _req) => {
-  console.log('[HMR] - client connected...')
+wss.once('connection', () => {
+  setTimeout(() => {
+    wss.clients.forEach(ws => ws.send(JSON.stringify({ type: 'reload' })))
+  }, 100)
+  wss.on('connection', () => console.log('[HMR] - client connected...'))
+})
+
+const watcher = chokidar.watch(['**/*.ts'], {
+  cwd: clientDir,
+  ignored: ['**/*.d.ts', 'hmr.ts'],
+  awaitWriteFinish: {
+    stabilityThreshold: 100
+  }
+})
+
+watcher.on('change', path => {
+  wss.clients.forEach(ws => ws.send(JSON.stringify({ type: 'update', url: `/${path}` })))
 })
 
 server.listen(3000, () => {
