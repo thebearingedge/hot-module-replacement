@@ -27,7 +27,7 @@ const server = http.createServer(async (req, res) => {
         sourcemap: 'inline',
         sourcefile: file,
         banner: WANTS_HMR.test(ts)
-          ? `import{createHotContext}from'/hmr.ts';import.meta.hot=createHotContext('${file}')`
+          ? `import{__hmr}from'/hmr.ts';import.meta.hot=__hmr('${file}')`
           : ''
       })
       res.writeHead(200, { 'Content-Type': 'text/javascript' }).end(code)
