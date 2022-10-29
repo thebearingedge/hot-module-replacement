@@ -2,8 +2,8 @@ let client: HotClient
 
 export function __hmr(url: string): HotContext {
   client ??= new HotClient(`ws://${window.location.host}`)
-  const mod = client.register(url)
-  mod != null && (mod.accepts = [])
+  const mod = client.registerModule(url)
+  Object.assign(mod, { accepts: [], dispose: () => {} })
   return new HotContext(url, client)
 }
 
@@ -11,7 +11,7 @@ type HotModule = {
   url: string
   data?: any
   accepts: AcceptCallback[]
-  dispose?: DisposeCallback
+  dispose: DisposeCallback
 }
 
 type Message =
@@ -38,21 +38,21 @@ class HotClient {
     }
   }
 
-  register(url: string): HotModule {
+  registerModule(url: string): HotModule {
     let mod = this.modules.get(url)
     if (mod != null) return mod
-    mod = { url, accepts: [] }
+    mod = { url, accepts: [], dispose: () => {} }
     this.modules.set(url, mod)
     return mod
   }
 
   registerAccept(id: string, callback: AcceptCallback): void {
-    const mod = this.register(id)
+    const mod = this.registerModule(id)
     mod.accepts.push(callback)
   }
 
   registerDispose(id: string, callback: DisposeCallback): void {
-    const mod = this.register(id)
+    const mod = this.registerModule(id)
     mod.dispose = callback
   }
 
