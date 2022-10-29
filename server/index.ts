@@ -53,9 +53,8 @@ const server = http.createServer(async (req, res) => {
 })
 
 const wss = new WebSocketServer({
-  server,
-  clientTracking: true,
-  handleProtocols: () => 'hot-module-replacement'
+  noServer: true,
+  clientTracking: true
 })
 
 wss.once('connection', () => {
@@ -66,7 +65,6 @@ wss.once('connection', () => {
 
 const watcher = chokidar.watch(['**/*.ts'], {
   cwd: clientDir,
-  ignored: ['**/*.d.ts', 'hmr.ts'],
   awaitWriteFinish: {
     stabilityThreshold: 100
   }
@@ -74,6 +72,12 @@ const watcher = chokidar.watch(['**/*.ts'], {
 
 watcher.on('change', path => {
   wss.clients.forEach(ws => ws.send(JSON.stringify({ type: 'update', url: `/${path}` })))
+})
+
+server.on('upgrade', (req, socket, head) => {
+  if (req.headers['sec-websocket-protocol'] === 'hot-module-replacement') {
+    wss.handleUpgrade(req, socket, head, (ws, req) => wss.emit('connection', ws, req))
+  }
 })
 
 server.listen(3000, () => {
