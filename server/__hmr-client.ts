@@ -14,7 +14,7 @@ type HotModule = {
   dispose: DisposeCallback
 }
 
-type Message =
+type MessagePayload =
   | { type: 'reload' }
   | { type: 'update', url: string }
 
@@ -22,7 +22,7 @@ class HotClient {
 
   #address: string
   #socket: WebSocket
-  #messageQueue: Message[] = []
+  #messageQueue: MessagePayload[] = []
   modules: Map<string, HotModule> = new Map()
 
   constructor(address: string) {
@@ -30,7 +30,7 @@ class HotClient {
     this.#socket = this.#connect(address)
   }
 
-  send(message: Message): void {
+  send(message: MessagePayload): void {
     if (this.#socket.readyState !== WebSocket.OPEN) {
       this.#messageQueue.push(message)
     } else {
@@ -46,13 +46,13 @@ class HotClient {
     return mod
   }
 
-  registerAccept(id: string, callback: AcceptCallback): void {
-    const mod = this.registerModule(id)
+  registerAccept(url: string, callback: AcceptCallback): void {
+    const mod = this.registerModule(url)
     mod.accepts.push(callback)
   }
 
-  registerDispose(id: string, callback: DisposeCallback): void {
-    const mod = this.registerModule(id)
+  registerDispose(url: string, callback: DisposeCallback): void {
+    const mod = this.registerModule(url)
     mod.dispose = callback
   }
 
@@ -120,16 +120,16 @@ type DisposeCallback = (data: any) => void | Promise<void>
 
 export class HotContext {
 
-  #id: string
+  #url: string
   #client: HotClient
 
-  constructor(id: string, client: HotClient) {
-    this.#id = id
+  constructor(url: string, client: HotClient) {
+    this.#url = url
     this.#client = client
   }
 
   #acceptDeps(deps: string[], callback: AcceptCallback['callback'] = () => {}) {
-    this.#client.registerAccept(this.#id, { deps, callback })
+    this.#client.registerAccept(this.#url, { deps, callback })
   }
 
   accept(): void
@@ -138,7 +138,7 @@ export class HotContext {
   accept(deps: readonly string[], callback: (mods: ModuleNamespace[] | undefined) => void): void
   accept(deps?: any, callback?: (...args: any[]) => void): void {
     if (deps == null || typeof deps === 'function') {
-      this.#acceptDeps([this.#id], ([mod]) => deps?.(mod))
+      this.#acceptDeps([this.#url], ([mod]) => deps?.(mod))
       return
     }
     if (typeof deps === 'string') {
@@ -153,7 +153,7 @@ export class HotContext {
   }
 
   dispose(callback: DisposeCallback): void {
-    this.#client.registerDispose(this.#id, callback)
+    this.#client.registerDispose(this.#url, callback)
   }
 
   invalidate(): void {
